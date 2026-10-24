@@ -1,12 +1,8 @@
-Assert the MCP client is disposable
+Probe the published catalog the way dshmarket reads it
 
-The child process holds the event loop open, so a client that cannot be
-reaped would keep a DSH unload from completing. The first probe run hung
-for exactly this reason: it never disposed, and the process stayed alive
-after every assertion had passed.
+verify-index.mjs checks the working copy. This checks the document a user
+actually pastes into Plugins -> Discover -> Index sources: that the URL
+serves it, that asRegistry() accepts it, and that installTargetFor()
+resolves it to github:wdx9413/craft-dsh-marketplace#path:/plugins/craft-context.
 
-Disposability is asserted through the effect closure, which is the only
-handle a host has, rather than through a back door the plugin does not
-actually expose.
-
-22 smoke assertions now, up from 21.
+Passes against the live raw URL. The GUI install path is still unverified.

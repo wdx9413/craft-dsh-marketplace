@@ -71,12 +71,17 @@ SSH，安装时下载不可行。代价是每次 craft 发版多一次 14 MB 提
 ## 本地验证
 
 ```sh
-node verify-index.mjs                                    # catalog 契约 + 插件四道门
-node plugins/craft-context/test/smoke.mjs                # 真实 MCP 往返
+node verify-index.mjs                          # catalog 契约 + 插件四道门
+node plugins/craft-context/test/smoke.mjs      # 真实 MCP 往返
+node tools/catalog-probe.mjs                   # 拉取已发布 catalog，按 dshmarket 规则校验
 ```
 
-当前结果：catalog 与四道门 28 项全 PASS；smoke 21 项全 PASS，运行时回报
-`0.12.104`，surface 91 个工具，读写真实 `~/.craft_data`。
+`catalog-probe.mjs` 覆盖本地校验到不了的一段：用户粘贴进「索引源」的那个 URL 必须
+serve 这份文档，且 dshmarket 会在 UI 看到之前就拒绝 category 不可用的 catalog。
+
+当前结果：catalog 与四道门 28 项 PASS；smoke 22 项 PASS；远端 catalog 6 项 PASS
+（含 `asRegistry` 两条与安装目标解析）。运行时回报 `0.12.104`，surface 91 个工具，
+读写真实 `~/.craft_data`。
 
 ## 同步新 craft 版本
 
@@ -102,11 +107,22 @@ $dsh  = "D:\application\dshdesktop\DSH Desktop\resources\app\node_modules\@deeps
 
 ## 已验证 / 未验证
 
-已验证：catalog 契约与四道门（28 项）、插件 shape 与三个工具的真实 MCP 往返（21 项，
-含 4 类非法参数拒绝）、`craft_info` 回报版本与声明一致、bundle 可独立启动、
-`vendor/` 自足（parser worker 与 bundle 同目录）。
+已验证：
 
-未验证：DSH 内真实安装与重启后工具是否进入模型上下文、市场 UI 渲染、
-`~/.craft_data` 与既有 Codex/Claude Craft 数据的并发写、`link:` 与 `github:` 两种安装
-路径的实际差异。这些需要在目标 Host 里跑，不能由本地协议测试代替——本仓库尚未推送远端，
-所以市场路径整体未测。
+- 推送至 `git@github.com:wdx9413/craft-dsh-marketplace.git`，远端 18 个文件完整，HEAD 一致
+- catalog 契约与四道门（28 项）
+- 插件 shape 与三个工具的真实 MCP 往返（22 项，含 4 类非法参数拒绝与 disposability）
+- `craft_info` 回报版本与声明一致；bundle 可独立启动；`vendor/` 自足
+- 已 `pnpm add link:` 装进本机 `profiles/web`：junction 正确、入口可从安装路径 import、
+  三个工具注册并真实调用成功；profile 的 `dsh.profile.bundles` 已追加 `dsh-craft-context`
+- 远端 catalog 通过 `asRegistry` 与安装目标解析（6 项）
+- 索引 raw URL 可达（HTTP 200）
+
+未验证：
+
+- **DSH 内真实会话**：bundles 列表变更需重启 DSH，重启会中断当前会话所以未做。
+  重启后应确认工具进入模型上下文、技能目录出现 `craft-context`
+- **市场 UI 安装路径**：从「发现」页点安装未测（GUI 操作受阻）；程序化验证已覆盖
+  市场会执行的 catalog 校验与安装目标解析
+- `~/.craft_data` 与既有 Codex/Claude Craft 数据的并发写
+- `github:` 安装（市场路径）与 `link:` 安装（本次所用）的实际差异
