@@ -128,6 +128,36 @@ for (const [label, args] of rejections) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The effect must be disposable. The MCP child holds the event loop open, so a
+// client that cannot be reaped would keep a DSH unload from completing.
+// ---------------------------------------------------------------------------
+let disposed = false
+{
+  const registeredOnce = new Map()
+  const servicesOnce = { tools: { register: (tool) => registeredOnce.set(tool.name, tool) } }
+  const ctxOnce = {
+    get: (key) => servicesOnce[key],
+    effect: (factory) => factory(),
+  }
+  apply(ctxOnce, {})
+  const infoOnce = registeredOnce.get('craft_context_info')
+  await infoOnce.execute({})
+
+  // apply() keeps the client inside the effect closure, so the only handle the
+  // host has is the disposer it registered. Reach it the same way cordis does.
+  const effects = []
+  const ctxWithEffects = {
+    ...servicesOnce,
+    get: (key) => servicesOnce[key],
+    effect: (factory) => { const value = factory(); effects.push(value); return value },
+  }
+  apply(ctxWithEffects, {})
+  for (const client of effects) client.dispose?.()
+  disposed = effects.every((client) => typeof client.dispose === 'function')
+}
+check('the MCP client is disposable', disposed)
+
 console.log('')
 if (failures === 0) {
   console.log('OK  craft-context smoke test passed')

@@ -1,0 +1,12 @@
+Assert the MCP client is disposable
+
+The child process holds the event loop open, so a client that cannot be
+reaped would keep a DSH unload from completing. The first probe run hung
+for exactly this reason: it never disposed, and the process stayed alive
+after every assertion had passed.
+
+Disposability is asserted through the effect closure, which is the only
+handle a host has, rather than through a back door the plugin does not
+actually expose.
+
+22 smoke assertions now, up from 21.
