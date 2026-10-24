@@ -1,0 +1,36 @@
+{
+  "name": "dsh-craft-context",
+  "version": "0.12.104",
+  "description": "Craft Context for DeepSeek Desktop: governed knowledge, scoped memory, routeable experience and checkpoint-pinned codebase analysis in one entry point.",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "skills",
+    "vendor",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=23"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "marketplace": {
+      "profiles": [
+        "web"
+      ],
+      "requiresRestart": true
+    }
+  }
+}

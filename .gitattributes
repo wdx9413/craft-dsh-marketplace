@@ -1,0 +1,11 @@
+# Source text normalizes to LF in the repository, so the same file does not
+# diff on every machine.
+* text=auto eol=lf
+
+# Vendored build output comes LAST on purpose. Git applies the last matching
+# line, so the catch-all above would otherwise override these: a CRLF
+# conversion changes the file the MCP runtime loads, and vendor/SOURCE.json
+# records its sha256.
+plugins/craft-context/vendor/craft-mcp.cjs -text
+plugins/craft-context/vendor/craft-parser-worker.js -text
+plugins/craft-context/vendor/SOURCE.json -text

@@ -1,0 +1,26 @@
+{
+  "updated": "2026-10-25",
+  "count": 1,
+  "categories": {
+    "developer-tools": {
+      "zh": "开发工具",
+      "en": "Developer Tools"
+    }
+  },
+  "plugins": [
+    {
+      "name": "craft-context",
+      "owner": "wdx9413",
+      "url": "https://github.com/wdx9413/craft-dsh-marketplace/tree/main/plugins/craft-context",
+      "category": ["developer-tools"],
+      "description": {
+        "zh": "Craft 的默认聚合入口：Knowledge、Memory、Experience、Codebase 四个子能力共用一个 Runtime，一次上下文解析返回受治理材料与回执。DSH 侧以 craft_context_info / craft_context_tools / craft_context_call 三个工具暴露，内置 MCP runtime 与 Skill，无需 Hook 或 npm 下载。",
+        "en": "Craft's default aggregate entry: Knowledge, Memory, Experience and Codebase on one Runtime, returning governed material and a receipt from a single context resolution. Exposed to DSH as craft_context_info / craft_context_tools / craft_context_call, with the MCP runtime and Skill bundled."
+      },
+      "install": "dsh plugin add craft-context@craft-dsh-marketplace",
+      "added": "2026-10-25",
+      "capabilities": ["fs-read", "llm"],
+      "capabilityCheckedAt": "2026-10-25"
+    }
+  ]
+}

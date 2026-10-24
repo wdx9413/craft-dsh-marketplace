@@ -1,0 +1,9 @@
+# dsh bundle patch: inserts this plugin into a profile's layer stack.
+# The entry id must be globally unique across every bundle in the profile —
+# a duplicate id makes the WHOLE profile fail to boot.
+- insert:
+    - id: craft-context
+      name: dsh-craft-context
+      config:
+        dataDir: ''
+        timeoutMs: 120000

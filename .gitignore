@@ -1,0 +1,22 @@
+# Local scratch and OS noise only.
+#
+# Deliberately NOT ignored: plugins/*/vendor/.
+#
+# The Craft MCP runtime is ~14 MB because the default Context surface carries
+# the TypeScript checker, and craft's own repository keeps dist/ out of Git, so
+# there is no lighter upstream artifact to point at. A DSH `github:` install
+# clones this repository and runs what it finds, so the runtime has to be here.
+# The cost is one 14 MB commit per Craft release; the alternative — fetching at
+# install time — fails on networks that reach GitHub only over SSH, which is
+# how this repository was built in the first place.
+#
+# If that trade ever stops being worth it, the seam is
+# plugins/craft-context/lib/mcp-client.js: bundlePath() is the only place the
+# vendored file is resolved.
+
+.DS_Store
+Thumbs.db
+desktop.ini
+node_modules/
+*.log
+.scratch/
