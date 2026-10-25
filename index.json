@@ -49,12 +49,12 @@
       },
       "versions": [
         {
-          "version": "0.12.104",
-          "publishTimestamp": 1792903674,
+          "version": "0.12.105",
+          "publishTimestamp": 1792948298,
           "source": {
             "type": "git",
             "url": "https://github.com/wdx9413/craft-dsh-marketplace",
-            "commit": "ad11d3de45686eab7f98a7b9aaf1f295c8221b1a",
+            "commit": "1251d80ac5f321fa856b26318a73b1be3ec79b48",
             "path": "plugins/craft-context"
           },
           "engines": {
