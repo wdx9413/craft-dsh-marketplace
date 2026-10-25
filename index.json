@@ -54,7 +54,7 @@
           "source": {
             "type": "git",
             "url": "https://github.com/wdx9413/craft-dsh-marketplace",
-            "commit": "1e9d191383eff21a5a5b788c2ea3bd69f5cfde9e",
+            "commit": "ad11d3de45686eab7f98a7b9aaf1f295c8221b1a",
             "path": "plugins/craft-context"
           },
           "engines": {
