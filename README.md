@@ -42,6 +42,39 @@ https://raw.githubusercontent.com/wdx9413/craft-dsh-marketplace/main/index.json
 市场随后会在「发现」页列出 `craft-context`，`plugin_market` 智能体工具也搜索同一份目录。
 官方目录是 `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json`，两者可并存。
 
+### 为什么条目里有 `npm` 字段
+
+`installTargetFor()` 的优先级是 `npm` → 作者 release tarball → `github:owner/repo`。
+没有 `npm` 字段时市场退回 `github:`，会克隆整个仓库（本仓库含 14 MB bundle），并且
+**无法判断该插件与当前 DSH 版本是否兼容**——市场要按包名去 npm 取 packument，没有
+npm 身份就无从问起，表现为「未能获取市场版本信息」（npm 404）。
+
+带 `npm` 字段后：安装是 2.5 MB 的 registry 拉取而非 14 MB 仓库克隆，兼容性判断与更新
+检查都走通。证据见 [dsh-install-findings.md](docs/dsh-install-findings.md)。
+
+## 发布到 npm
+
+包已具备发布条件（`npm pack` 产出 10 个文件、2.5 MB，`prepublishOnly` 自动跑 smoke 与
+catalog 校验）。发布需要一个**有 publish 权限的 token**：
+
+```sh
+# 在 npmjs.com → Access Tokens → Generate New Token
+#   类型 Automation，勾选 read & write，或勾选 publish + bypass 2FA
+npm login --auth-type=legacy --registry=https://registry.npmjs.org
+# 或直接写入 ~/.npmrc：
+#   //registry.npmjs.org/:_authToken=<token>
+
+cd plugins/craft-context
+npm publish --access public --registry https://registry.npmjs.org
+```
+
+> `npm login --auth-type=web`（浏览器登录）产生的是**会话 token**，可以读、不能发布：
+> npm 对它一律返回 `403 … Two-factor authentication or granular access token with
+> bypass 2fa enabled is required to publish packages`。本机当前就是这个状态。
+
+发布后本目录的 `index.json` 已经带上了 `npm: dsh-craft-context`，无需再改；市场会
+按 `installTargetFor()` 优先走 registry。
+
 ## 插件包：plugins/craft-context
 
 | 文件 | 作用 |
