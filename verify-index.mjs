@@ -28,6 +28,25 @@ import { parseMarketIndex, MarketIndexError, npmExists } from './tools/market-in
 
 const here = dirname(fileURLToPath(import.meta.url))
 
+const PROFILE_DIR = process.env.DSH_PROFILE_DIR
+  ?? join(process.env.APPDATA ?? '', 'dsh-desktop', 'harness', 'profiles', 'web')
+
+/**
+ * The market's own parsers, loaded from the installed dshmarket.
+ *
+ * Both questions this file asks — can this patch be hot-mounted, and is this
+ * plugin actually active — have their answer in dshmarket, and the answers
+ * are the difference between "installed" and "running". Guessing at them
+ * would mean reimplementing rules the host enforces.
+ */
+async function loadMarketModules() {
+  const hot = await import(`file:///${join(PROFILE_DIR, 'node_modules', 'dshmarket', 'lib', 'hot.js').replace(/\\/g, '/')}`)
+  const verify = await import(`file:///${join(PROFILE_DIR, 'node_modules', 'dshmarket', 'lib', 'verify.js').replace(/\\/g, '/')}`)
+  return { parseSimplePatch: hot.parseSimplePatch, verifyActivation: verify.verifyActivation }
+}
+
+const market = await loadMarketModules()
+
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const NPM_NAME_RE = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
 
@@ -120,6 +139,19 @@ for (const plugin of index.plugins) {
       check(`${at}@${version.version} declares a dsh engine range`, true, version.engines.dsh)
     }
   }
+
+  // The activation state the market would show for this plugin, when it is
+  // installed on this machine. `restart` means installed but not running yet;
+  // `broken` means the next boot would fail. Both are worth knowing before a
+  // user opens the market, and neither is visible from the index file.
+  if (existsSync(join(PROFILE_DIR, 'node_modules', plugin.name))) {
+    const activation = market.verifyActivation(PROFILE_DIR, plugin.name, new Set(), PROFILE_DIR)
+    console.log(`      activation: ${activation.state}`)
+    for (const reason of activation.reasons ?? []) console.log(`        ${reason}`)
+    check(`${at} is not broken`, activation.state !== 'broken', activation.state)
+  } else {
+    console.log(`      activation: not installed on this machine`)
+  }
 }
 
 // ===========================================================================
@@ -198,6 +230,16 @@ for (const dir of packageDirs) {
         !allEntryIds.includes(id), 'already declared by another package in this marketplace')
       allEntryIds.push(id)
     }
+
+    // Gate 5 — the patch must be hot-mountable. The market's parser accepts
+    // nothing but plain id/name insert rows; a config block, a disabled row
+    // or an expression makes it return null, and the plugin then activates on
+    // the next boot instead of this session. That reads as "installed" while
+    // nothing is running, which is the failure this catches.
+    const hotRows = market.parseSimplePatch(readFileSync(patchPath, 'utf8'))
+    check(`${at} bundle patch is hot-mountable (gate 5: plain id/name rows)`,
+      hotRows !== null,
+      'a config block, a disabled row or an expression rejects the whole patch')
   }
 
   // Gate 4 — the entry module must import cleanly. The two ways this fails in

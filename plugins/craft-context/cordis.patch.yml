@@ -1,9 +1,14 @@
 # dsh bundle patch: inserts this plugin into a profile's layer stack.
 # The entry id must be globally unique across every bundle in the profile —
 # a duplicate id makes the WHOLE profile fail to boot.
+#
+# Only plain `id` / `name` insert rows. A `config:` block, a `disabled:` row
+# or an expression makes the whole patch fall back to restart-only activation:
+# the market's hot-mount parser accepts nothing but id/name pairs, and it
+# reports such a patch as "the bundle patch contains config/expression rows —
+# hot-mount only supports plain inserts". Configuration therefore comes from
+# the environment instead: CRAFT_DATA_DIR for the data root, CRAFT_CONTEXT_TIMEOUT_MS
+# for the per-request timeout.
 - insert:
     - id: craft-context
       name: dsh-craft-context
-      config:
-        dataDir: ''
-        timeoutMs: 120000

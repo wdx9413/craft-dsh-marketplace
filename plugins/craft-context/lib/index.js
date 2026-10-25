@@ -49,13 +49,29 @@ const render = (_args, value) => [{ type: 'text', text: JSON.stringify(value) }]
 export const name = 'craft-context'
 export const inject = ['tools']
 
-export function apply(ctx, config = {}) {
-  const clientOptions = {
+/**
+ * Read the runtime configuration.
+ *
+ * The bundle patch carries only plain id/name insert rows, because anything
+ * else in it — a config block, a disabled row, an expression — makes the
+ * market's hot-mount parser refuse the whole patch and the plugin fall back
+ * to restart-only activation. Configuration therefore arrives through the
+ * environment, which the host already forwards to the process.
+ */
+function readConfig(config) {
+  const dataDir = config.dataDir ?? process.env.CRAFT_DATA_DIR ?? ''
+  const timeout = config.timeoutMs ?? process.env.CRAFT_CONTEXT_TIMEOUT_MS
+  const parsed = timeout === undefined || timeout === '' ? Number.NaN : Number(timeout)
+  return {
     product: config.product ?? PRODUCT,
     ...(config.bundlePath ? { bundlePath: config.bundlePath } : {}),
-    ...(config.dataDir ? { dataDir: config.dataDir } : {}),
-    ...(config.timeoutMs ? { timeoutMs: config.timeoutMs } : {}),
+    ...(dataDir !== '' ? { dataDir } : {}),
+    ...(Number.isFinite(parsed) && parsed > 0 ? { timeoutMs: parsed } : {}),
   }
+}
+
+export function apply(ctx, config = {}) {
+  const clientOptions = readConfig(config)
 
   // The child process is an effect so unload/restart reaps it; without this a
   // removed plugin leaves an orphan MCP process holding the SQLite handle.

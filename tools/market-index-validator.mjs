@@ -19,7 +19,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
@@ -64,7 +64,30 @@ function asarHeaderText(asarPath) {
 
 function asarIsNewerThanCache() {
   if (!existsSync(VALIDATOR_PATH)) return true
-  return statSync(ASAR_PATH).mtimeMs > statSync(VALIDATOR_PATH).mtimeMs
+  if (statSync(ASAR_PATH).mtimeMs > statSync(VALIDATOR_PATH).mtimeMs) return true
+  // The semver wrapper is written separately from the validator, and a stray
+  // npm install into the cache replaces it. Both have to be present.
+  return !existsSync(join(SEMVER_DIR, 'index.mjs'))
+}
+
+/**
+ * The semver the validator needs, as an ESM module.
+ *
+ * The asar's copy is CommonJS and the validator imports it as ESM, so a
+ * wrapper is required. The cache prefers an installed copy — npm has it in
+ * seconds, while rebuilding it from the 369 MB asar takes minutes — and
+ * falls back to extracting the host's own.
+ */
+async function loadSemver() {
+  if (!existsSync(join(SEMVER_DIR, 'index.mjs'))) {
+    try {
+      extractSemver()
+    } catch {
+      // The asar path is a fallback, not the only way.
+    }
+  }
+  return import(pathToFileURL(join(SEMVER_DIR, 'index.mjs')).href)
+    .catch(() => import('semver'))
 }
 
 function extractValidator() {
@@ -79,6 +102,10 @@ function extractValidator() {
 function extractSemver() {
   // semver is a CommonJS package that the validator imports as ESM. The
   // asar's copy is used, with a wrapper that exposes its default export.
+  // The directory is rebuilt from scratch: a stray npm install into this
+  // cache replaces the wrapper with a package whose exports map has no
+  // import condition, and the validator then fails to load.
+  rmSync(SEMVER_DIR, { recursive: true, force: true })
   mkdirSync(SEMVER_DIR, { recursive: true })
   const header = asarHeaderText(ASAR_PATH)
   const at = header.indexOf('"semver":{"files"')
@@ -102,7 +129,6 @@ function extractSemver() {
   writeFileSync(join(SEMVER_DIR, 'package.json'),
     '{ "name": "semver", "version": "7.7.0", "type": "commonjs", "main": "index.js",'
     + ' "exports": { ".": { "import": "./index.mjs", "require": "./index.js" } } }')
-
   const wrapper = `import semverCommon from './index.js'\n`
     + 'export const SemVer = semverCommon.SemVer\n'
     + 'export const Range = semverCommon.Range\n'
@@ -138,6 +164,10 @@ const module_ = await import(pathToFileURL(VALIDATOR_PATH).href)
 export const parseMarketIndex = module_.parseMarketIndex
 export const MarketIndexError = module_.MarketIndexError
 export const marketInstallTarget = module_.marketInstallTarget
+
+// The same semver the validator uses, so a range check here is the check the
+// host's own loader makes.
+export const semver = await loadSemver()
 
 /**
  * Whether a package is actually in a registry.
