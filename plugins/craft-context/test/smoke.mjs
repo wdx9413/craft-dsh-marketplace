@@ -40,7 +40,15 @@ const services = {
 const ctx = {
   ...services,
   get: (key) => services[key],
-  effect: (factory, label) => { effects.push(`effect:${label}`); return factory() },
+  // cordis 4.x rejects an effect factory that returns anything but a disposer,
+  // a thenable, an iterator, or nothing. Mirror that rule here: a regression in
+  // the plugin should fail this test, not the host's startup audit.
+  effect: (factory, label) => {
+    effects.push(`effect:${label}`)
+    const dispose = factory()
+    if (typeof dispose !== 'function' && dispose != null) throw new TypeError('Invalid effect')
+    return dispose
+  },
 }
 
 check('plugin exports a name', typeof name === 'string' && name !== '')
@@ -136,25 +144,32 @@ let disposed = false
 {
   const registeredOnce = new Map()
   const servicesOnce = { tools: { register: (tool) => registeredOnce.set(tool.name, tool) } }
+  let disposer
   const ctxOnce = {
     get: (key) => servicesOnce[key],
-    effect: (factory) => factory(),
+    effect: (factory) => {
+      const value = factory()
+      // The host refuses anything but a teardown function here.
+      if (typeof value !== 'function') throw new TypeError('Invalid effect')
+      disposer = value
+      return value
+    },
   }
   apply(ctxOnce, {})
   const infoOnce = registeredOnce.get('craft_context_info')
   await infoOnce.execute({})
 
   // apply() keeps the client inside the effect closure, so the only handle the
-  // host has is the disposer it registered. Reach it the same way cordis does.
-  const effects = []
-  const ctxWithEffects = {
-    ...servicesOnce,
-    get: (key) => servicesOnce[key],
-    effect: (factory) => { const value = factory(); effects.push(value); return value },
+  // host has is the teardown the factory returned. Reaching that teardown and
+  // seeing the client stop answering is what proves disposal actually works.
+  disposer()
+  let message = ''
+  try {
+    await infoOnce.execute({})
+  } catch (error) {
+    message = error.message
   }
-  apply(ctxWithEffects, {})
-  for (const client of effects) client.dispose?.()
-  disposed = effects.every((client) => typeof client.dispose === 'function')
+  disposed = message.includes('client is disposed')
 }
 check('the MCP client is disposable', disposed)
 

@@ -75,9 +75,21 @@ export function apply(ctx, config = {}) {
 
   // The child process is an effect so unload/restart reaps it; without this a
   // removed plugin leaves an orphan MCP process holding the SQLite handle.
-  const client = ctx.effect
-    ? ctx.effect(() => createCraftClient(clientOptions), 'craft-context: mcp client')
-    : createCraftClient(clientOptions)
+  //
+  // The factory must return a disposer (or nothing): cordis 4.x rejects any
+  // other return value with `TypeError: Invalid effect`, which fails plugin
+  // activation and — for a required entry — the whole startup. Returning the
+  // client object here is what broke 0.12.104; keep the client in this closure
+  // and hand cordis only the teardown.
+  let client
+  if (typeof ctx.effect === 'function') {
+    ctx.effect(() => {
+      client = createCraftClient(clientOptions)
+      return () => client.dispose()
+    }, 'craft-context: mcp client')
+  } else {
+    client = createCraftClient(clientOptions)
+  }
 
   const tools = ctx.get('tools')
   if (tools !== undefined) {
