@@ -55,11 +55,11 @@ npm 身份就无从问起，表现为「未能获取市场版本信息」（npm 
 ## 发布到 npm
 
 包已具备发布条件（`npm pack` 产出 10 个文件、2.5 MB，`prepublishOnly` 自动跑 smoke 与
-catalog 校验）。发布需要一个**有 publish 权限的 token**：
+catalog 校验）。发布需要**带 bypass 2FA 能力的 token**：
 
 ```sh
-# 在 npmjs.com → Access Tokens → Generate New Token
-#   类型 Automation，勾选 read & write，或勾选 publish + bypass 2FA
+# npmjs.com → Access Tokens → 新建或编辑 token
+#   类型 Automation，权限 package:write，并勾选 Bypass 2FA
 npm login --auth-type=legacy --registry=https://registry.npmjs.org
 # 或直接写入 ~/.npmrc：
 #   //registry.npmjs.org/:_authToken=<token>
@@ -68,12 +68,19 @@ cd plugins/craft-context
 npm publish --access public --registry https://registry.npmjs.org
 ```
 
-> `npm login --auth-type=web`（浏览器登录）产生的是**会话 token**，可以读、不能发布：
-> npm 对它一律返回 `403 … Two-factor authentication or granular access token with
-> bypass 2fa enabled is required to publish packages`。本机当前就是这个状态。
+> **为什么必须是 bypass 2FA**：npm 官方要求「发布需要账号开启 2FA，**或**使用启用了
+> bypass 2FA 的 granular access token」。账号 `wdx9413` 的 `tfa` 为 `false`，所以 token
+> 自己必须带 `bypass_2fa: true`。权限已经是 `package:write` 也不够——npm 对缺少
+> bypass 2FA 的 token 一律返回
+> `403 … Two-factor authentication or granular access token with bypass 2fa enabled is required to publish packages`。
+> 排查记录见 [dsh-install-findings.md](docs/dsh-install-findings.md)。
 
 发布后本目录的 `index.json` 已经带上了 `npm: dsh-craft-context`，无需再改；市场会
-按 `installTargetFor()` 优先走 registry。
+按 `installTargetFor()` 优先走 registry。验证：
+
+```sh
+node tools/catalog-probe.mjs   # npm package is reachable in the registry → PASS
+```
 
 ## 插件包：plugins/craft-context
 

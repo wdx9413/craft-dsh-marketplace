@@ -95,12 +95,35 @@ https://registry.npmjs.org: HTTP 404
 Two-factor authentication or granular access token with bypass 2fa enabled is required to publish packages.
 ```
 
-根因不是 2FA 本身：账号 `wdx9413` 的 `tfa` 为 `false`，`tokens` 为空数组。当前
-`~/.npmrc` 里是 `npm login --auth-type=web` 产生的**会话 token**（40 字符 classic 格式），
-它能读 registry 但没有发布权限，npm 对这类 token 一律以这条措辞拒绝。
+根因不是账号没开 2FA：账号 `wdx9413` 的 `tfa` 为 `false`。这条 npm 的措辞有误导性，
+真正缺的是 **token 自己的 bypass 2FA 能力**。用 npm 的 token 列表端点可以看到 token 的
+全部属性：
 
-需要的是一个有 publish 权限的 token（Automation 类型的 granular access token，
-或 classic token），这一步涉及账号凭据，由账号持有者操作。
+```json
+{
+  "key": "9d49aacc-2182-4dd5-b404-45f57ef525a7",
+  "bypass_2fa": false,
+  "permissions": [{ "name": "package", "action": "write" }],
+  "scopes": [{ "name": null, "type": "package" }]
+}
+```
+
+`permissions` 已经是 package:write，但 `bypass_2fa: false` —— npm 官方文档的要求是
+「发布需要账号开启 2FA，**或**使用启用了 bypass 2FA 的 granular access token」。
+账号既然没开 2FA，这个 token 就必须带 bypass 2FA。
+
+已排除的其它可能：
+
+| 假设 | 结论 |
+|---|---|
+| `.npmrc` 里的旧会话 token 覆盖了环境变量 | 排除：用 `--userconfig` 指向只含新 token 的隔离 npmrc，仍是同一个 403 |
+| `NODE_AUTH_TOKEN` 未被采纳 | 排除：隔离 npmrc 的发布同样使用新 token |
+| 包本身有问题 | 排除：`npm pack` 成功，10 个文件、2.5 MB；403 是权限拒绝，不是内容问题 |
+| 账号开了 2FA 但没配 OTP | 排除：账号 `tfa: false`；`npm profile enable-2fa` 需账号密码，CLI 无法自助开启 |
+
+**解法**：编辑该 token，勾选 **Bypass 2FA**（npmjs.com → Access Tokens → 该 token →
+Edit → Bypass 2FA）。或给账号开启 2FA（`npm profile enable-2fa auth-and-writes`），
+之后用普通 token + 一次性验证码发布。两者都需要账号持有者本人操作。
 
 发布后 `tools/catalog-probe.mjs` 的 `npm package is reachable in the registry`
 一项会从 FAIL 转为 PASS——该探针现在与市场用同一条代码路径失败。
