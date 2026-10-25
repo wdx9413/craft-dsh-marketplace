@@ -36,6 +36,27 @@ function parseSourceUrl(value) {
   return { repo: m[1], subpath }
 }
 
+/**
+ * Whether the named package is actually in the registry.
+ *
+ * A catalog entry may name a package that was never published, and the market
+ * then answers the version question with a 404 — the "failed to fetch market
+ * version" report. This is the check that catches it before a user does.
+ */
+async function npmExists(name) {
+  try {
+    const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+      headers: { accept: 'application/json', 'user-agent': 'craft-dsh-marketplace-probe' },
+    })
+    if (res.status === 404) return false
+    if (!res.ok) return false
+    const doc = await res.json()
+    return typeof doc?.name === 'string' && doc.name === name
+  } catch {
+    return false
+  }
+}
+
 console.log(`fetching ${url}`)
 let response
 try {
@@ -69,17 +90,35 @@ check('asRegistry: every plugin carries a usable category',
   }))
 
 // dshmarket/src/sources.ts installTargetFor(): every entry needs a target.
+// The order matters and is the source's own: the npm name wins, then an
+// author-supplied release tarball, then the git source. A probe that reported
+// the git target for an entry carrying an npm field would describe an install
+// the market never performs.
 for (const [index, plugin] of (catalog.plugins ?? []).entries()) {
   const at = `plugins[${index}] (${String(plugin?.name ?? '?')})`
   const source = parseSourceUrl(String(plugin?.url ?? ''))
   const hasNpm = typeof plugin.npm === 'string' && NPM_NAME_RE.test(plugin.npm)
   const hasTarball = typeof plugin.tarball === 'string' && plugin.tarball.trim() !== ''
   check(`${at} resolves to an install target`, source !== null || hasNpm || hasTarball)
-  if (source !== null) {
-    const target = source.subpath !== null
+
+  let target = null
+  if (hasNpm) target = plugin.npm
+  else if (hasTarball) target = plugin.tarball
+  else if (source !== null) {
+    target = source.subpath !== null
       ? `github:${source.repo}#path:/${source.subpath}`
       : `github:${source.repo}`
+  }
+  if (target !== null) {
     console.log(`      → ${at} installs from ${target}`)
+  }
+
+  // An entry with an npm field is installable from the registry, which is what
+  // lets the market ask npm for the package's manifest — the compatibility
+  // check that a git-only entry cannot pass.
+  if (hasNpm) {
+    check(`${at} npm package is reachable in the registry`,
+      await npmExists(String(plugin.npm)))
   }
 }
 
