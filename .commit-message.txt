@@ -1,8 +1,20 @@
-Probe the published catalog the way dshmarket reads it
+Record what the DSH install actually did
 
-verify-index.mjs checks the working copy. This checks the document a user
-actually pastes into Plugins -> Discover -> Index sources: that the URL
-serves it, that asRegistry() accepts it, and that installTargetFor()
-resolves it to github:wdx9413/craft-dsh-marketplace#path:/plugins/craft-context.
+The link: install was removed by DSH itself, with a full backup and a
+boot verification and no failures, which makes it a normal uninstall
+rather than a load failure. The same file already holds three earlier
+craft removals from 2026-09-19, so it is a recurring path, not a one-off.
 
-Passes against the live raw URL. The GUI install path is still unverified.
+The "failed to fetch market version" message is the market asking npm for
+a package that does not exist: dshmarket resolves a plugin's version by
+package name, and a catalog entry without an npm field has no npm
+identity to ask with. The npm 404 and the npmmirror abort are both that
+one question, asked of two registries.
+
+The fix follows from installTargetFor's priority order: publish the
+plugin as an npm package and give the entry an npm field. That also
+removes the 14 MB bundle from the git history, since an npm package
+carries it instead.
+
+Nothing here is implemented yet: the npm shape is a design inference
+from the source, not a measurement.

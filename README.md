@@ -105,6 +105,11 @@ $dsh  = "D:\application\dshdesktop\DSH Desktop\resources\app\node_modules\@deeps
 
 或走市场：添加上面的索引 URL 后从「发现」页安装。装完**重启 DSH** 生效。
 
+> ⚠️ **`link:` 安装实测会被 DSH 主动移除**（带完整备份与 boot 验证，`failures: []`），
+> 且 catalog 条目没有 `npm` 字段会让市场在取版本信息时报「未能获取市场版本信息」
+> （npm 404）。原因与证据见 [dsh-install-findings.md](docs/dsh-install-findings.md)。
+> 生产路径应发布 npm 包并给条目补 `npm` 字段。
+
 ## 已验证 / 未验证
 
 已验证：
@@ -126,3 +131,4 @@ $dsh  = "D:\application\dshdesktop\DSH Desktop\resources\app\node_modules\@deeps
   市场会执行的 catalog 校验与安装目标解析
 - `~/.craft_data` 与既有 Codex/Claude Craft 数据的并发写
 - `github:` 安装（市场路径）与 `link:` 安装（本次所用）的实际差异
+- **npm 包形态**：第 3 节「catalog 条目应带 `npm` 字段」是设计推断，未实测
