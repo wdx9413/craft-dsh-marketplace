@@ -3,6 +3,50 @@
 记录把 craft-context 装进本机 DSH 时实际发生的事，以及由此得出的 catalog 设计约束。
 结论全部来自本机文件证据，标注了路径。
 
+## 0. 「此索引的格式无效」：两套索引格式被混用了
+
+这个错误是第一位的：索引源根本读不进去，后面所有安装动作都无从谈起。
+
+DSH 里有**两套互不相同的索引格式**，由不同代码读取：
+
+| | dshmarket 目录 | 官方 Discover 索引源 |
+|---|---|---|
+| 读取者 | `dshmarket/src/registry.ts` | `@deepseek-ai/dsh-plugin-market-index` |
+| 顶层 | `updated, count, categories, plugins` | `format: 1, title, description, metadata, plugins` |
+| 条目 | `name, owner, url, category, install, added` | `name, title, description, icon, author, homepage, repository, metadata, versions` |
+| 版本 | 无 | `versions[]`：`version`、`publishTimestamp`、`source`、`engines` |
+
+本仓库最初按 **dshmarket 目录**的格式写 `index.json`，填进官方 Discover 的「索引源」
+输入框，于是被 `@deepseek-ai/dsh-plugin-market-index` 拒绝。该校验器的第一条规则就是
+`$.format === 1`，而文档里没有这个字段，于是报「此索引的格式无效」。
+
+**错误消息不说是哪条规则被违反**，所以定位靠的是把校验器本身找出来：
+
+| 步骤 | 结果 |
+|---|---|
+| 官方 `dsh-plugin-catalog` npm 包 | 下下来解开，`index.json` 顶层是 `format, title, description, metadata, plugins` |
+| 在 app.asar 里搜「此索引的格式无效」 | 命中 `readInvalid` 文案，属于 Discover 客户端 |
+| 搜 `parseIndexInWorker` | 找到服务端调用：`fetchIndex` → `parseIndexInWorker` → 失败抛 `plugin-market/invalid-index` |
+| 搜 `parse-thread.js` | 拿到 `parse.js`，它 import 的是 `@deepseek-ai/dsh-plugin-market-index` |
+| 定位该包的 `lib/index.js` | 拿到完整 format 1 校验器 |
+
+**format 1 的规则**（来自校验器源码）：
+
+- `$.format` 必须等于 `1`
+- `$.title` 必填，且必须含 `en`
+- `$.plugins[i].name` 必须是合法 npm 包名
+- `$.plugins[i].versions` 必填且非空；`version` 精确 SemVer；`publishTimestamp` 是 Unix 秒整数
+- `versions[j].source` 必填：`{type:"npm", registry?}` 或 `{type:"git", url, commit(40 位小写 hex), path?}`
+- `metadata.category` / `labels` / `sortKeys` 引用的 id **必须在 `$.metadata` 里先声明**
+- `repository.url` 必须是 http(s) 且不带 query/fragment；`homepage` 允许带 fragment
+- `engines.dsh` 必须是 SemVer range，不能 `workspace:`
+
+安装目标由 `marketInstallTarget()` 决定：npm 源是 `name@version`；git 源是
+`git+<url>.git#<commit>&path:/<dir>`，**必须 pin 到 commit**。
+
+**教训**：索引格式不能靠「看起来像」来定。两个包都叫「market」，都能列插件，但字段集
+完全不同。要确认格式，唯一的办法是找到读取它的那段代码。
+
 ## 1. `link:` 安装会被 DSH 主动移除
 
 `pnpm add link:<插件目录>` 装进 `profiles/web` 成功，junction 建立，bundles 手工追加后
@@ -128,9 +172,19 @@ Edit → Bypass 2FA）。或给账号开启 2FA（`npm profile enable-2fa auth-a
 发布后 `tools/catalog-probe.mjs` 的 `npm package is reachable in the registry`
 一项会从 FAIL 转为 PASS——该探针现在与市场用同一条代码路径失败。
 
-## 5. 未验证项
+## 5. 当前状态与未验证项
 
-- 从市场「发现」页点击安装（GUI 路径）未测；程序化验证覆盖了 catalog 校验与安装目标解析
-- `github:` 安装（市场路径）未测，本次只用 `link:`
-- **registry 安装本身未测**：包尚未发布，tarball 路径已测，registry 路径未测
-- **npm 包的 DSH 内实际加载未测**：需要在 DSH 里装 npm 包并重启后确认
+**已能读入索引**：`index.json` 已改为 format 1，并由官方校验器验证通过——
+`tools/market-index-validator.mjs` 直接调用从 app.asar 抽出的
+`@deepseek-ai/dsh-plugin-market-index`，不重写规则。旧格式被它明确拒绝为
+`$.format must be 1`，这说明检查是有效的而非自我确认。远端 URL 实测通过。
+
+未验证：
+
+- **从市场「发现」页点击安装**（GUI 路径）未测。程序化验证覆盖了市场会执行的
+  format 1 校验与安装目标构造，但没有覆盖点击本身。
+- **安装后的实际加载**未测：git 源会构造
+  `git+<url>.git#<commit>&path:/plugins/craft-context`，需要真实装一次并重启 DSH，
+  确认 `craft_context_info` 进入模型上下文、技能目录出现 `craft-context`。
+- **registry 安装未测**：包尚未发布，tarball 路径已测，registry 路径未测。
+- `~/.craft_data` 与既有 Codex/Claude Craft 数据的并发写未测。

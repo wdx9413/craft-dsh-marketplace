@@ -9,19 +9,40 @@ DSH 插件包（自带 Craft MCP runtime）。指向 craft 源码仓库是行不
 
 ## 索引格式依据
 
-格式与字段语义来自本机 `dshmarket@1.66.42` 源码，不是推测：
+**这是两套不同的格式，别混。** 本仓库最初把 dshmarket 的目录格式写进了官方 Discover
+的索引源输入框，被拒绝为「此索引的格式无效」。两者由不同代码读取：
 
-| 事实 | 源码位置 |
-|---|---|
-| catalog 顶层结构 `{updated, count, categories, plugins}` | `dshmarket/src/registry.ts` `Registry` / `RegistryPlugin` |
-| `plugins` 非空，且每条必须有 usable `category`，否则整份 catalog 被拒 | `dshmarket/src/registry.ts` `asRegistry()` |
-| 安装目标决策：`npm` 名优先 → 作者 release tarball → `github:owner/repo` | `dshmarket/src/sources.ts` `installTargetFor()` |
-| `url` 必须是 `https://github.com/owner/repo`（可带 `/tree/<branch>/<subpath>`） | `dshmarket/src/sources.ts` `parseSourceUrl()` |
-| 安装路由只按 `url` 精确匹配目录条目 | `dshmarket/src/routes.ts` install 分支 |
+| | dshmarket 目录（`dshmarket` 包） | 官方 Discover 索引源（本仓库用的） |
+|---|---|---|
+| 读取者 | `dshmarket/src/registry.ts` | `@deepseek-ai/dsh-plugin-market-index` |
+| 顶层 | `updated, count, categories, plugins` | `format: 1, title, description, metadata, plugins` |
+| 条目 | `name, owner, url, category, install, added` | `name, title, description, icon, author, homepage, repository, metadata, versions` |
+| 版本 | 无 | `versions[]`：`version`（精确 SemVer）、`publishTimestamp`（Unix 秒）、`source`、`engines` |
+| 分类 | 顶层 `categories` 字典 | `metadata.categories` + 条目 `metadata.category` 引用 |
 
-因此每个条目的 `url` 必须唯一。5 个条目共用同一个仓库 url 会让后 4 个装成第 1 个——
-这是 `registry.plugins.find(p => p.url.toLowerCase() === url)` 的直接后果，`verify-index.mjs`
-会拦住。
+**format 1 的关键规则**（全部来自
+`@deepseek-ai/dsh-plugin-market-index/lib/index.js`）：
+
+- `$.format` 必须等于 `1`
+- `$.title` 必填，且必须含 `en`（`localizedText`）
+- `$.plugins[i].name` 必须是合法 npm 包名
+- `$.plugins[i].versions` 必填且非空；`version` 必须是精确 SemVer；
+  `publishTimestamp` 必须是 Unix 秒整数
+- `$.plugins[i].versions[j].source` 必填：`{type:"npm", registry?}` 或
+  `{type:"git", url, commit（40 位小写 hex）, path?}`
+- `$.plugins[i].metadata.category` 若出现，**必须在 `$.metadata.categories` 里声明**；
+  `labels` 与 `sortKeys` 同理
+- `$.plugins[i].repository.url` 必须是 http(s) **且不带 query 或 fragment**；
+  `homepage` 则允许带 fragment
+- `$.plugins[i].versions[j].engines.dsh` 若出现，必须是 SemVer range（不能 `workspace:`）
+
+安装目标由 `marketInstallTarget()` 决定：npm 源是 `name@version`；git 源是
+`git+<url>.git#<commit>&path:/<dir>`——**必须 pin 到 commit**。
+
+本仓库的 `tools/market-index-validator.mjs` 不重写这套规则，而是**从本机 DSH 的
+app.asar 里抽出官方校验器直接调用**。所以 `verify-index.mjs` 问的是 Discover 页问的
+同一个问题，答不上来时给的是同一条 path 与 reason。旧格式被它明确拒绝为
+`$.format must be 1`——这说明这项检查是有效的，不是自我确认。
 
 ## 为什么只有一个条目
 
@@ -39,18 +60,25 @@ component 名，**不是 release product**（见 `craft/core/release-catalog.ts`
 https://raw.githubusercontent.com/wdx9413/craft-dsh-marketplace/main/index.json
 ```
 
-市场随后会在「发现」页列出 `craft-context`，`plugin_market` 智能体工具也搜索同一份目录。
+市场随后会在「发现」页列出 `dsh-craft-context`，`plugin_market` 智能体工具也搜索同一份目录。
 官方目录是 `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json`，两者可并存。
 
-### 为什么条目里有 `npm` 字段
+### 当前用的是 git 源，npm 发布后切换
 
-`installTargetFor()` 的优先级是 `npm` → 作者 release tarball → `github:owner/repo`。
-没有 `npm` 字段时市场退回 `github:`，会克隆整个仓库（本仓库含 14 MB bundle），并且
-**无法判断该插件与当前 DSH 版本是否兼容**——市场要按包名去 npm 取 packument，没有
-npm 身份就无从问起，表现为「未能获取市场版本信息」（npm 404）。
+条目的 `versions[0].source` 现在是：
 
-带 `npm` 字段后：安装是 2.5 MB 的 registry 拉取而非 14 MB 仓库克隆，兼容性判断与更新
-检查都走通。证据见 [dsh-install-findings.md](docs/dsh-install-findings.md)。
+```json
+{ "type": "git", "url": "https://github.com/wdx9413/craft-dsh-marketplace",
+  "commit": "<40 位 commit>", "path": "plugins/craft-context" }
+```
+
+市场据此构造 `git+<url>.git#<commit>&path:/plugins/craft-context`——按 commit 固定，
+不跟随分支漂移。代价是安装要克隆仓库（本仓库含 14 MB bundle）。
+
+npm 包发布后，把 `source` 换成 `{ "type": "npm" }` 即可：市场会走 `name@version` 从
+registry 拉取（2.5 MB），并且能取到 packument 判断与当前 DSH 版本的兼容性——这正是
+「未能获取市场版本信息」所缺的那一步。证据见
+[dsh-install-findings.md](docs/dsh-install-findings.md)。
 
 ## 发布到 npm
 
