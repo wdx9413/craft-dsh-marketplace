@@ -64,8 +64,50 @@ https://registry.npmjs.org: HTTP 404
 - `installTargetFor()` 优先走 registry，安装更快、可校验完整性
 - 兼容性判断与更新检查全部走通
 
-## 4. 未验证项
+## 4. npm 包形态：已实施与实测
+
+包已改造成可发布形态（`plugins/craft-context/package.json`）：
+
+- `publishConfig: { registry: "https://registry.npmjs.org", access: "public" }`
+- `engines.dsh` 采用生态里的分段表达式
+  `>=0.1.7-rc.2 <0.2.0-rc.1 || >=0.2.0-rc.1 <0.2.1-rc.2 || >=0.2.1-rc.2 <0.2.2`
+- `@deepseek-ai/cordis` 标为 **optional peer**。这一步是必需的而非可选：非 optional 的
+  宿主 peer 会让 pnpm 把整个宿主依赖树拖进用户 profile，实测
+  `dsh-workbuddy-trae-qoder-connect` 因此拖进 165 个包并直接失败。本插件不 import
+  任何 `@deepseek-ai/*`，标 optional 不影响运行。
+- catalog 条目补上 `npm: dsh-craft-context`
+
+实测（`npm pack` 后在临时工程里 `pnpm add file:...tgz`）：
+
+| 项 | 结果 |
+|---|---|
+| 包内容 | 10 个文件，压缩 2.34 MB（未压缩 13.9 MB） |
+| 安装引入的包数 | **1 个**（`dsh-craft-context`），1.1 秒 |
+| 传递依赖 | 无宿主依赖树被拖入 |
+| 安装后文件 | 10 个全部就位，入口可 import（`name=craft-context inject=["tools"]`） |
+
+### 发布被凭据挡住
+
+`npm publish` 返回：
+
+```
+403 Forbidden - PUT https://registry.npmjs.org/dsh-craft-context
+Two-factor authentication or granular access token with bypass 2fa enabled is required to publish packages.
+```
+
+根因不是 2FA 本身：账号 `wdx9413` 的 `tfa` 为 `false`，`tokens` 为空数组。当前
+`~/.npmrc` 里是 `npm login --auth-type=web` 产生的**会话 token**（40 字符 classic 格式），
+它能读 registry 但没有发布权限，npm 对这类 token 一律以这条措辞拒绝。
+
+需要的是一个有 publish 权限的 token（Automation 类型的 granular access token，
+或 classic token），这一步涉及账号凭据，由账号持有者操作。
+
+发布后 `tools/catalog-probe.mjs` 的 `npm package is reachable in the registry`
+一项会从 FAIL 转为 PASS——该探针现在与市场用同一条代码路径失败。
+
+## 5. 未验证项
 
 - 从市场「发现」页点击安装（GUI 路径）未测；程序化验证覆盖了 catalog 校验与安装目标解析
 - `github:` 安装（市场路径）未测，本次只用 `link:`
-- npm 包形态未实施，因此上述第 3 节是设计推断，非实测
+- **registry 安装本身未测**：包尚未发布，tarball 路径已测，registry 路径未测
+- **npm 包的 DSH 内实际加载未测**：需要在 DSH 里装 npm 包并重启后确认
