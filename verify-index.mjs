@@ -1,25 +1,30 @@
 #!/usr/bin/env node
 /**
- * Validate this marketplace: the catalog contract dshmarket enforces, plus the
- * four gates every plugin package must pass or the market uninstalls it.
+ * Validate this marketplace.
  *
- * Transcribed from dshmarket@1.66.42 source, not guessed:
- *   - Registry / RegistryPlugin       src/registry.ts
- *   - asRegistry()                    src/registry.ts  (plugins non-empty, category usable)
- *   - parseSourceUrl() / REPO_RE      src/sources.ts
- *   - installTargetFor()              src/sources.ts   (npm > tarball > github:)
- *   - NPM_NAME_RE                     src/sources.ts
+ * Part 1 — the index document. The official Discover index source is read by
+ * `@deepseek-ai/dsh-plugin-market-index`, whose format 1 validator is what
+ * produces "This index is not in a valid format". That validator is used
+ * here directly, extracted from the installed DSH asar, so an index that
+ * passes this passes the same check the Discover section runs.
+ *
+ * Part 2 — the four gates every plugin package must pass or the market
+ * uninstalls it. Transcribed from dshmarket@1.66.42 source, not guessed:
  *   - hasDshManifest()                src/profile.ts   (manifest.dsh !== undefined)
  *   - entryArtifactExists()           src/profile.ts   (main / exports['.'] / index.js)
  *   - conflictingEntryIds()           src/install.ts   (duplicate loader entry id)
+ *   - installTargetFor()              src/sources.ts   (npm > tarball > github:)
+ *   - NPM_NAME_RE                     src/sources.ts
  *
- * Network access: none. Exit 0 = pass, 1 = fail.
+ * Network access: none, except the optional npm reachability check.
+ * Exit 0 = pass, 1 = fail.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { parseYaml } from './tools/mini-yaml.mjs'
+import { parseMarketIndex, MarketIndexError, npmExists } from './tools/market-index-validator.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
@@ -60,83 +65,61 @@ function readJson(path) {
 }
 
 // ===========================================================================
-// Part 1 — the catalog contract
+// Part 1 — the index document, validated by the market's own validator
 // ===========================================================================
 
 const indexPath = join(here, 'index.json')
-let catalog
+let document
 try {
-  catalog = readJson(indexPath)
+  document = readJson(indexPath)
 } catch (error) {
   console.log(`FAIL  index.json parses — ${error.message}`)
   process.exit(1)
 }
 
-check('plugins is a non-empty array', Array.isArray(catalog.plugins) && catalog.plugins.length > 0)
-check('updated is a string', typeof catalog.updated === 'string' && catalog.updated.length > 0)
-check('count matches plugins.length', catalog.count === catalog.plugins.length,
-  `count=${String(catalog.count)} plugins=${String(catalog.plugins?.length)}`)
-check('categories is an object', typeof catalog.categories === 'object' && catalog.categories !== null)
-
-const seenNames = new Set()
-const seenUrls = new Set()
-const seenTargets = new Set()
-
-for (const [index, plugin] of catalog.plugins.entries()) {
-  const at = `plugins[${index}] (${String(plugin?.name ?? '?')})`
-
-  check(`${at}.name is a non-empty string`, typeof plugin.name === 'string' && plugin.name.length > 0)
-  check(`${at}.owner is a non-empty string`, typeof plugin.owner === 'string' && plugin.owner.length > 0)
-  check(`${at}.name is unique`, !seenNames.has(plugin.name), 'already listed')
-  seenNames.add(plugin.name)
-
-  const url = typeof plugin.url === 'string' ? plugin.url : ''
-  const source = parseSourceUrl(url)
-  check(`${at}.url is a parseable GitHub repo url`, source !== null, url)
-
-  // The install route matches by url: registry.plugins.find(p => p.url.toLowerCase() === url).
-  // Two entries sharing a url resolve to the first one, so the second installs the wrong plugin.
-  check(`${at}.url is unique`, !seenUrls.has(url.toLowerCase()), url)
-  seenUrls.add(url.toLowerCase())
-
-  if (source !== null) {
-    check(`${at}.owner matches url repo owner`, source.repo.split('/')[0] === plugin.owner,
-      `url=${source.repo} owner=${String(plugin.owner)}`)
+const INDEX_URL = 'https://raw.githubusercontent.com/wdx9413/craft-dsh-marketplace/main/index.json'
+let index = null
+try {
+  index = parseMarketIndex(document, INDEX_URL)
+  check('the index satisfies the market format 1 validator', true)
+} catch (error) {
+  if (error instanceof MarketIndexError) {
+    check('the index satisfies the market format 1 validator', false, `${error.path} ${error.reason}`)
+  } else {
+    check('the index satisfies the market format 1 validator', false, String(error?.message ?? error))
   }
+  process.exit(1)
+}
 
-  const categories = Array.isArray(plugin.category) ? plugin.category : [plugin.category]
-  const usable = categories.filter((value) => typeof value === 'string' && value !== '')
-  check(`${at} carries a usable category`, usable.length > 0, JSON.stringify(plugin.category))
-  for (const id of usable) {
-    const declared = catalog.categories?.[id]
-    check(`${at}.category "${id}" is declared in categories`,
-      declared !== undefined && typeof declared === 'object')
+console.log(`      title: ${index.title.en}`)
+console.log(`      plugins: ${index.plugins.length}`)
+
+for (const plugin of index.plugins) {
+  const at = `plugins (${plugin.name})`
+  check(`${at} declares a valid npm package name`, NPM_NAME_RE.test(plugin.name), plugin.name)
+  check(`${at} has at least one version`, plugin.versions.length > 0)
+
+  for (const version of plugin.versions) {
+    console.log(`      → ${at}@${version.version}  source=${version.source.type}`)
+
+    if (version.source.type === 'npm') {
+      // An npm-sourced version must exist in the registry, or the market's
+      // version question answers 404 and the row reports "failed to fetch
+      // market version".
+      const registry = version.source.registry ?? 'https://registry.npmjs.org'
+      const reachable = await npmExists(registry, plugin.name)
+      check(`${at}@${version.version} npm package is published`, reachable, plugin.name)
+    } else {
+      check(`${at}@${version.version} pins a full commit SHA`,
+        /^[0-9a-f]{40}$/.test(version.source.commit), version.source.commit)
+      check(`${at}@${version.version} names a repository`,
+        /^(?:\/[^/]+){2,}$/.test(new URL(version.source.url).pathname), version.source.url)
+    }
+
+    if (version.engines.dsh !== undefined) {
+      check(`${at}@${version.version} declares a dsh engine range`, true, version.engines.dsh)
+    }
   }
-
-  check(`${at}.description is a non-empty localized record`,
-    typeof plugin.description === 'object' && plugin.description !== null
-    && Object.keys(plugin.description).length > 0)
-  check(`${at}.description has zh`, typeof plugin.description?.zh === 'string'
-    && plugin.description.zh.length > 0)
-  check(`${at}.install is a non-empty string`, typeof plugin.install === 'string'
-    && plugin.install.length > 0)
-  check(`${at}.added is a date string`, /^\d{4}-\d{2}-\d{2}$/.test(String(plugin.added ?? '')))
-
-  if (plugin.npm !== undefined && plugin.npm !== null) {
-    check(`${at}.npm matches NPM_NAME_RE`, NPM_NAME_RE.test(String(plugin.npm)), String(plugin.npm))
-  }
-
-  const target = installTargetFor(plugin)
-  check(`${at} resolves to an install target`, target !== null)
-  if (target !== null) {
-    // Two entries that resolve to the same pnpm target install the same package.
-    check(`${at} install target is unique`, !seenTargets.has(target), target)
-    seenTargets.add(target)
-    console.log(`      → ${at} installs from ${target}`)
-  }
-
-  check(`${at}.capabilities is an array when present`,
-    plugin.capabilities === undefined || Array.isArray(plugin.capabilities))
 }
 
 // ===========================================================================
@@ -234,8 +217,6 @@ for (const dir of packageDirs) {
   check(`${at} ships a SKILL.md`, existsSync(join(dir, 'skills', 'craft-context', 'SKILL.md')))
 
   // --- npm publishability ------------------------------------------------
-  // The catalog entry names an npm package, so the package has to actually be
-  // publishable and installable by a host that knows nothing about this repo.
   const npmName = manifest.name
   check(`${at} declares a publishable package name`,
     typeof npmName === 'string' && NPM_NAME_RE.test(npmName), npmName)
@@ -246,7 +227,6 @@ for (const dir of packageDirs) {
   check(`${at} declares an engines.dsh range`,
     typeof manifest.engines?.dsh === 'string' && manifest.engines.dsh !== '',
     String(manifest.engines?.dsh))
-  check(`${at} declares a repository`, typeof manifest.repository?.url === 'string')
 
   // A non-optional @deepseek-ai/cordis peer makes pnpm pull the host's whole
   // dependency tree into the user profile — measured at 165 packages and a
@@ -258,16 +238,16 @@ for (const dir of packageDirs) {
   check(`${at} marks every @deepseek-ai peer optional`,
     unoptional.length === 0, unoptional.join(', '))
 
-  // The catalog entry must point at the same package the manifest declares,
-  // or the market installs one thing and reports another.
-  const catalogEntry = catalog.plugins.find((plugin) => plugin.npm === npmName)
-  check(`${at} is referenced by a catalog entry with an npm field`, catalogEntry !== undefined, npmName)
+  // The index entry must name the same package the manifest declares, or the
+  // market installs one thing and reports another.
+  const named = index.plugins.find((plugin) => plugin.name === npmName)
+  check(`${at} is named by an index entry`, named !== undefined, npmName)
 }
 
 console.log('')
 if (failures === 0) {
   const pkgs = packageDirs.length
-  console.log(`OK  ${catalog.plugins.length} catalog entr${catalog.plugins.length === 1 ? 'y' : 'ies'},`
+  console.log(`OK  ${index.plugins.length} index entr${index.plugins.length === 1 ? 'y' : 'ies'},`
     + ` ${pkgs} package${pkgs === 1 ? '' : 's'}, 0 failures`)
   process.exit(0)
 }

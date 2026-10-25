@@ -1,27 +1,67 @@
 {
-  "updated": "2026-10-25",
-  "count": 1,
-  "categories": {
-    "developer-tools": {
-      "zh": "开发工具",
-      "en": "Developer Tools"
-    }
+  "format": 1,
+  "title": {
+    "en": "Craft for DeepSeek Desktop",
+    "zh": "Craft 插件（DeepSeek Desktop）"
+  },
+  "description": {
+    "en": "Craft Context for DeepSeek Desktop: governed knowledge, scoped memory, routeable experience and checkpoint-pinned codebase analysis in one entry point.",
+    "zh": "Craft Context 的 DeepSeek Desktop 插件：知识、记忆、经验与代码库分析四合一入口，全部受治理、可溯源。"
+  },
+  "metadata": {
+    "categories": {
+      "developer-tools": {
+        "title": {
+          "en": "Developer Tools",
+          "zh": "开发工具"
+        }
+      }
+    },
+    "labels": {},
+    "sortKeys": {}
   },
   "plugins": [
     {
-      "name": "craft-context",
-      "owner": "wdx9413",
-      "url": "https://github.com/wdx9413/craft-dsh-marketplace/tree/main/plugins/craft-context",
-      "npm": "dsh-craft-context",
-      "category": ["developer-tools"],
-      "description": {
-        "zh": "Craft 的默认聚合入口：Knowledge、Memory、Experience、Codebase 四个子能力共用一个 Runtime，一次上下文解析返回受治理材料与回执。DSH 侧以 craft_context_info / craft_context_tools / craft_context_call 三个工具暴露，内置 MCP runtime 与 Skill，无需 Hook 或 npm 下载。",
-        "en": "Craft's default aggregate entry: Knowledge, Memory, Experience and Codebase on one Runtime, returning governed material and a receipt from a single context resolution. Exposed to DSH as craft_context_info / craft_context_tools / craft_context_call, with the MCP runtime and Skill bundled."
+      "name": "dsh-craft-context",
+      "title": {
+        "en": "Craft Context",
+        "zh": "Craft 上下文"
       },
-      "install": "dsh plugin add craft-context@craft-dsh-marketplace",
-      "added": "2026-10-25",
-      "capabilities": ["fs-read", "llm"],
-      "capabilityCheckedAt": "2026-10-25"
+      "description": {
+        "en": "Craft's default aggregate entry: Knowledge, Memory, Experience and Codebase on one Runtime, returning governed material and a receipt from a single context resolution. Exposed to DSH as craft_context_info / craft_context_tools / craft_context_call, with the MCP runtime and Skill bundled.",
+        "zh": "Craft 的默认聚合入口：知识、记忆、经验与代码库四个子能力共用一个 Runtime，一次上下文解析返回受治理材料与回执。DSH 侧以 craft_context_info / craft_context_tools / craft_context_call 三个工具暴露，内置 MCP runtime 与 Skill。"
+      },
+      "author": "wdx9413",
+      "homepage": "https://github.com/wdx9413/craft-dsh-marketplace",
+      "repository": {
+        "url": "https://github.com/wdx9413/craft-dsh-marketplace",
+        "directory": "plugins/craft-context"
+      },
+      "metadata": {
+        "category": "developer-tools",
+        "keywords": [
+          "context",
+          "memory",
+          "knowledge",
+          "codebase",
+          "agent"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.12.104",
+          "publishTimestamp": 1792903674,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/wdx9413/craft-dsh-marketplace",
+            "commit": "0ff7df062051e5419910b750fac96fa3fa42a4c8",
+            "path": "plugins/craft-context"
+          },
+          "engines": {
+            "dsh": ">=0.1.7-rc.2 <0.2.0-rc.1 || >=0.2.0-rc.1 <0.2.1-rc.2 || >=0.2.1-rc.2 <0.2.2"
+          }
+        }
+      ]
     }
   ]
 }
