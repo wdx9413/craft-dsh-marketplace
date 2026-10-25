@@ -1,20 +1,21 @@
-Record what the DSH install actually did
+Publish as an npm package and name it in the catalog
 
-The link: install was removed by DSH itself, with a full backup and a
-boot verification and no failures, which makes it a normal uninstall
-rather than a load failure. The same file already holds three earlier
-craft removals from 2026-09-19, so it is a recurring path, not a one-off.
-
-The "failed to fetch market version" message is the market asking npm for
-a package that does not exist: dshmarket resolves a plugin's version by
+The link: install was removed by DSH itself, and the market reported the
+row as "failed to fetch market version" because it asked npm for a
+package that did not exist: dshmarket resolves a plugin's version by
 package name, and a catalog entry without an npm field has no npm
-identity to ask with. The npm 404 and the npmmirror abort are both that
-one question, asked of two registries.
+identity to ask with.
 
-The fix follows from installTargetFor's priority order: publish the
-plugin as an npm package and give the entry an npm field. That also
-removes the 14 MB bundle from the git history, since an npm package
-carries it instead.
+installTargetFor prefers the npm name over the git source, so naming the
+package in the entry fixes the version question, lets discovery judge
+compatibility against the host, and makes the install a 2.5 MB registry
+fetch instead of a 14 MB repository clone.
 
-Nothing here is implemented yet: the npm shape is a design inference
-from the source, not a measurement.
+@deepseek-ai/cordis is declared an optional peer on purpose. A
+non-optional peer makes pnpm pull the host's whole dependency tree into
+the user profile, which is what broke the install of
+dsh-workbuddy-trae-qoder-connect at 165 packages. This plugin imports
+nothing from that tree.
+
+The package is publishable now: npm pack produces 10 files, 2.5 MB
+compressed. Not yet published; the registry has no such package.

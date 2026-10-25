@@ -232,6 +232,36 @@ for (const dir of packageDirs) {
 
   // A Skill is what carries the usage discipline into the model's context.
   check(`${at} ships a SKILL.md`, existsSync(join(dir, 'skills', 'craft-context', 'SKILL.md')))
+
+  // --- npm publishability ------------------------------------------------
+  // The catalog entry names an npm package, so the package has to actually be
+  // publishable and installable by a host that knows nothing about this repo.
+  const npmName = manifest.name
+  check(`${at} declares a publishable package name`,
+    typeof npmName === 'string' && NPM_NAME_RE.test(npmName), npmName)
+  check(`${at} publishConfig targets the public registry`,
+    manifest.publishConfig?.registry === 'https://registry.npmjs.org'
+    && manifest.publishConfig?.access === 'public',
+    JSON.stringify(manifest.publishConfig))
+  check(`${at} declares an engines.dsh range`,
+    typeof manifest.engines?.dsh === 'string' && manifest.engines.dsh !== '',
+    String(manifest.engines?.dsh))
+  check(`${at} declares a repository`, typeof manifest.repository?.url === 'string')
+
+  // A non-optional @deepseek-ai/cordis peer makes pnpm pull the host's whole
+  // dependency tree into the user profile — measured at 165 packages and a
+  // failed install on dsh-workbuddy-trae-qoder-connect. The plugin imports
+  // nothing from that tree, so the peer is declared optional.
+  const peers = manifest.peerDependencies ?? {}
+  const optionalPeers = manifest.peerDependenciesMeta ?? {}
+  const unoptional = Object.keys(peers).filter((name) => optionalPeers[name]?.optional !== true)
+  check(`${at} marks every @deepseek-ai peer optional`,
+    unoptional.length === 0, unoptional.join(', '))
+
+  // The catalog entry must point at the same package the manifest declares,
+  // or the market installs one thing and reports another.
+  const catalogEntry = catalog.plugins.find((plugin) => plugin.npm === npmName)
+  check(`${at} is referenced by a catalog entry with an npm field`, catalogEntry !== undefined, npmName)
 }
 
 console.log('')

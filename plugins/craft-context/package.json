@@ -2,6 +2,28 @@
   "name": "dsh-craft-context",
   "version": "0.12.104",
   "description": "Craft Context for DeepSeek Desktop: governed knowledge, scoped memory, routeable experience and checkpoint-pinned codebase analysis in one entry point.",
+  "keywords": [
+    "dsh",
+    "deepseek",
+    "skill",
+    "skills",
+    "mcp",
+    "mcp-server",
+    "plugin",
+    "cordis",
+    "context",
+    "memory",
+    "knowledge"
+  ],
+  "homepage": "https://github.com/wdx9413/craft-dsh-marketplace#readme",
+  "bugs": {
+    "url": "https://github.com/wdx9413/craft-dsh-marketplace/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wdx9413/craft-dsh-marketplace.git",
+    "directory": "plugins/craft-context"
+  },
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
@@ -17,10 +39,24 @@
     "README.md"
   ],
   "engines": {
+    "dsh": ">=0.1.7-rc.2 <0.2.0-rc.1 || >=0.2.0-rc.1 <0.2.1-rc.2 || >=0.2.1-rc.2 <0.2.2",
     "node": ">=23"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node test/smoke.mjs",
+    "prepublishOnly": "node test/smoke.mjs && node ../../verify-index.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
   },
   "dsh": {
     "bundle": {
