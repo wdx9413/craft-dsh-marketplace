@@ -47,7 +47,48 @@ DSH 里有**两套互不相同的索引格式**，由不同代码读取：
 **教训**：索引格式不能靠「看起来像」来定。两个包都叫「market」，都能列插件，但字段集
 完全不同。要确认格式，唯一的办法是找到读取它的那段代码。
 
-## 1. `link:` 安装会被 DSH 主动移除
+## 1. 安装成功但「启用失败」：bundle patch 里的 config 块
+
+安装本身是成功的：
+
+| 证据 | 内容 |
+|---|---|
+| `profiles/web/.plugin-manager/logs/<id>/generation.log` | `generation-install: installed in 5937ms` → `promoted to dsh-craft-context+0.12.104+0c287c7822fc` |
+| profile `package.json` | `dependencies` 有 `dsh-craft-context = 0.12.104`，`dsh.profile.bundles` 有 `dsh-craft-context` |
+| `profiles/.generations/live/dsh-craft-context+0.12.104+0c287c7822fc/` | 完整产物，含 `vendor/craft-mcp.cjs`（13.9 MB） |
+
+**这次是被 Desktop 托管为 generation 的，不再是 `link:`。** 之前 `link:` 装完会被移除，
+市场路径不会。
+
+「启用失败」的根因是 `cordis.patch.yml` 里我写了 `config:` 块。市场的热挂载解析器
+`parseSimplePatch()`（`dshmarket/src/hot.ts:162`）只接受纯 `id` / `name` 两行：
+
+```js
+if (/^-\s+insert:\s*$/.test(line)) continue
+const id = /^\s+-\s+id:\s*(\S+)\s*$/.exec(line)
+const name = /^\s+name:\s*['"]?([^'"\s]+)['"]?\s*$/.exec(line)
+if (name !== null && pending !== null) { rows.push(...); continue }
+return null          // 任何 config / disabled / 表达式行 → 整份 patch 作废
+```
+
+返回 null 意味着不能热挂载，插件要等下次启动才生效。市场如实报告了这一点：
+
+```
+state: restart
+bundle patch 含配置/表达式,热挂载仅支持纯 insert;重启后由 bundle 层生效
+```
+
+生态里所有可热挂载的插件都用纯形式：`dshmarket`、`dsh-find-plugin`、
+`dsh-workbuddy-trae-qoder-connect` 的 patch 都只有 `- id:` 与 `name:` 两行。
+
+**修复**：去掉 `config:` 块，配置改由环境变量提供——`CRAFT_DATA_DIR`（数据根）、
+`CRAFT_CONTEXT_TIMEOUT_MS`（单请求超时）。宿主本来就会把环境变量转给插件进程。
+
+**这一条现在进了门禁**：`verify-index.mjs` 用市场自己的 `parseSimplePatch()` 判定，
+不是自己仿写一份规则。同一个文件还读市场的 `verifyActivation()`，所以「装了但没跑」
+这种状态在本地验证阶段就能看见，而不是等用户打开插件列表才发现。
+
+## 2. `link:` 安装会被 DSH 主动移除
 
 `pnpm add link:<插件目录>` 装进 `profiles/web` 成功，junction 建立，bundles 手工追加后
 插件可加载、可调用。但之后 DSH 执行了标准卸载流程：
@@ -174,17 +215,21 @@ Edit → Bypass 2FA）。或给账号开启 2FA（`npm profile enable-2fa auth-a
 
 ## 5. 当前状态与未验证项
 
-**已能读入索引**：`index.json` 已改为 format 1，并由官方校验器验证通过——
+**索引可被读入**：`index.json` 已是 format 1，由官方校验器验证通过——
 `tools/market-index-validator.mjs` 直接调用从 app.asar 抽出的
 `@deepseek-ai/dsh-plugin-market-index`，不重写规则。旧格式被它明确拒绝为
 `$.format must be 1`，这说明检查是有效的而非自我确认。远端 URL 实测通过。
 
+**安装成功**：市场把插件装成 generation（不再是 `link:`），产物完整，含 13.9 MB 的
+runtime bundle。
+
+**修复了「启用失败」**：bundle patch 去掉 `config:` 块后恢复可热挂载。
+
 未验证：
 
-- **从市场「发现」页点击安装**（GUI 路径）未测。程序化验证覆盖了市场会执行的
-  format 1 校验与安装目标构造，但没有覆盖点击本身。
-- **安装后的实际加载**未测：git 源会构造
-  `git+<url>.git#<commit>&path:/plugins/craft-context`，需要真实装一次并重启 DSH，
-  确认 `craft_context_info` 进入模型上下文、技能目录出现 `craft-context`。
+- **修正版是否真的被装上并热挂载**：本机 profile 里还是旧版（带 `config:` 块），
+  需要在 DSH 里重新安装一次。装上后用
+  `node tools/check-activation.mjs` 读市场的 activation 状态，应为 `live`。
+- **工具是否真的进入模型上下文**：需要新会话里调用 `craft_context_info`。
 - **registry 安装未测**：包尚未发布，tarball 路径已测，registry 路径未测。
 - `~/.craft_data` 与既有 Codex/Claude Craft 数据的并发写未测。
