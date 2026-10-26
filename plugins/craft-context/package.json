@@ -1,6 +1,6 @@
 {
   "name": "dsh-craft-context",
-  "version": "0.12.105",
+  "version": "0.12.115",
   "description": "Craft Context for DeepSeek Desktop: governed knowledge, scoped memory, routeable experience and checkpoint-pinned codebase analysis in one entry point.",
   "keywords": [
     "dsh",

@@ -1,16 +1,16 @@
 {
   "source": "craft",
   "synced_from": "D:\\documents\\project\\mytest\\craft",
-  "version": "0.12.104",
-  "synced_at": "2026-10-24T17:22:54.332Z",
+  "version": "0.12.115",
+  "synced_at": "2026-10-26T14:47:55.045Z",
   "artifacts": {
     "craft-mcp.cjs": {
-      "sha256": "sha256:91ccb3e852d7f3aa675f8203fc61cf518a0d10396576b5bd7852e595362db131",
-      "bytes": 13881422
+      "sha256": "sha256:f678a94cf5c7af6e4676f3709ef3b1f1bead545c0d87d51b9d46eb540dc25fb0",
+      "bytes": 14112979
     },
     "craft-parser-worker.js": {
-      "sha256": "sha256:6bcc3de4457f40cb1243bae8b3c73d6112e5481b88ec23d187348302da4b165c",
-      "bytes": 4539
+      "sha256": "sha256:908bbd5d14284b01cbfa909f8b3193dd7c1c96a0a003d8f64486a7622333e4c2",
+      "bytes": 5040
     }
   }
 }
